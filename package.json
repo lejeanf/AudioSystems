@@ -1,8 +1,8 @@
 {
   "name": "fr.jeanf.audiosystems",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "displayName": "Audio Systems",
-  "description": "",
+  "description": "Lightweight Audio system for Unity",
   "unity": "2021.3",
   "keywords": [
     "jeanf",
@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "fr.jeanf.eventsystem": "0.1.121",
-    "fr.jeanf.propertydrawer": "1.1.6"
+    "fr.jeanf.propertydrawer": "1.1.6",
+    "com.unity.inputsystem": "1.11.1"
   },
   "samples": []
 }
