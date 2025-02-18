@@ -1,0 +1,21 @@
+{
+  "name": "fr.jeanf.audiosystems",
+  "version": "0.0.1",
+  "displayName": "Audio Systems",
+  "description": "",
+  "unity": "2021.3",
+  "keywords": [
+    "jeanf",
+    "audiosystems"
+  ],
+  "author": {
+    "name": "Jean-François Robin",
+    "email": "robin.jeanfrancois@gmail.com",
+    "url": "https://jeanfrancoisrobin.art"
+  },
+  "dependencies": {
+    "fr.jeanf.eventsystem": "0.1.121",
+    "fr.jeanf.propertydrawer": "1.1.6"
+  },
+  "samples": []
+}
