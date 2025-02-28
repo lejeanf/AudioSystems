@@ -119,6 +119,7 @@ public class MixerManagerEditor : Editor {
         var toggle = (MixerManager)target;
         if(GUILayout.Button("Toggle snapshot", GUILayout.Height(30)))
         {
+            GUILayout.Space(10);
             toggle.ToggleMixerSnapshot();
         }
         GUILayout.Space(10);

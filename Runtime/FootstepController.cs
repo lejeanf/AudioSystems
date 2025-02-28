@@ -4,8 +4,8 @@ using jeanf.EventSystem;
 namespace jeanf.audiosystems
 {
     public class FootstepController : MonoBehaviour {
-        public float minTimeBetweenFootsteps = 0.3f; // Minimum time between footstep sounds
-        public float maxTimeBetweenFootsteps = 0.6f; // Maximum time between footstep sounds
+        public float minTimeBetweenFootsteps = 0.4f; // Minimum time between footstep sounds
+        public float maxTimeBetweenFootsteps = 0.5f; // Maximum time between footstep sounds
 
         [SerializeField] private AudioSource audioSource; // Reference to the Audio Source component
         private bool isMoving = false; // Flag to track if the player is walking
