@@ -37,9 +37,9 @@ namespace jeanf.audiosystems
          private bool _readyToPlay;
 
 
-         private async void OnEnable() =>  Subscribe();
-         private async void OnDisable() =>  Unsubscribe();
-         private async void OnDestroy() =>  Unsubscribe();
+         private void OnEnable() =>  Subscribe();
+         private void OnDisable() =>  Unsubscribe();
+         private void OnDestroy() =>  Unsubscribe();
          
          public void Subscribe()
          {
