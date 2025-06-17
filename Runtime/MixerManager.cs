@@ -1,4 +1,3 @@
-using System.Collections;
 using Cysharp.Threading.Tasks;
 using jeanf.EventSystem;
 using jeanf.scenemanagement;
@@ -30,7 +29,6 @@ public class MixerManager : MonoBehaviour
     [Header("Listening on:")]
     [SerializeField] private VoidEventChannelSO muteEvent;
     [SerializeField] private VoidEventChannelSO unmuteEvent;
-    [SerializeField] private VoidEventChannelSO floorLoadingIsFinished;
     [SerializeField] private BoolEventChannelSO stethoscopeStateEvent;
     [Header("Broadcasting on:")]
     [SerializeField] private VoidEventChannelSO floorLoadingIsFinishedAndSoundIsUnMuted;
@@ -50,8 +48,7 @@ public class MixerManager : MonoBehaviour
     
     private void Subscribe()
     {
-        //SceneLoader.IsLoading += SetMixerState;
-        WorldManager.InitComplete += OnInitComplete;
+        SceneLoader.IsInitialLoadComplete += OnInitComplete;
         WorldManager.PublishCurrentRegionId += ctx => OnRegionChange();
         SceneLoader.LoadComplete += OnDependencyLoadComplete;
         muteEvent.OnEventRaised += Mute;
@@ -61,8 +58,7 @@ public class MixerManager : MonoBehaviour
     
     private void Unsubscribe()
     {
-        //SceneLoader.IsLoading -= SetMixerState;
-        WorldManager.InitComplete -= OnInitComplete;
+        SceneLoader.IsInitialLoadComplete -= OnInitComplete;
         WorldManager.PublishCurrentRegionId -= ctx => OnRegionChange();
         SceneLoader.LoadComplete -= OnDependencyLoadComplete;
         muteEvent.OnEventRaised -= Mute;
@@ -75,6 +71,7 @@ public class MixerManager : MonoBehaviour
     private void OnDependencyLoadComplete(bool state)
     {
         if(!state) return;
+        Debug.Log("Received load completion message.");
         isDepedencyLoaded = true;
     }
 
@@ -95,7 +92,9 @@ public class MixerManager : MonoBehaviour
         Mute();
         
         // 2 - wait until load is complete
+        Debug.Log($"isDependencyLoaded = {isDepedencyLoaded}");
         await UniTask.WaitUntil(() => isDepedencyLoaded);
+        Debug.Log($"isDependencyLoaded = {isDepedencyLoaded}");
         
         // 3 - unmute
         await Unmute();
