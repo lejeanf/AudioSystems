@@ -71,18 +71,20 @@ public class MixerManager : MonoBehaviour
     private void OnDependencyLoadComplete(bool state)
     {
         if(!state) return;
-        Debug.Log("Received load completion message.");
         isDepedencyLoaded = true;
     }
 
     private async void OnInitComplete(bool state)
     {
+        initComplete = state;
         if (!state) return;
         LoadingInformation.LoadingStatus?.Invoke("Audio systems initialized successfully.");
+        await UniTask.WaitUntil(() => isDepedencyLoaded);
+        
         await Unmute();
+        await UniTask.WaitForSeconds(.1f);
         // send event for intro sound trigger.
         introSound?.RaiseEvent();
-        initComplete = true;
     }
     private async void OnRegionChange()
     {
@@ -96,6 +98,7 @@ public class MixerManager : MonoBehaviour
         
         // 3 - unmute
         await Unmute();
+        await UniTask.WaitForSeconds(.1f);
         
         // 4 - elevator sound
         floorLoadingIsFinishedAndSoundIsUnMuted.RaiseEvent();
