@@ -48,7 +48,7 @@ public class MixerManager : MonoBehaviour
     
     private void Subscribe()
     {
-        SceneLoader.IsInitialLoadComplete += OnInitComplete;
+        WorldManager.InitComplete += OnInitComplete;
         WorldManager.PublishCurrentRegionId += ctx => OnRegionChange();
         SceneLoader.LoadComplete += OnDependencyLoadComplete;
         muteEvent.OnEventRaised += Mute;
@@ -58,7 +58,7 @@ public class MixerManager : MonoBehaviour
     
     private void Unsubscribe()
     {
-        SceneLoader.IsInitialLoadComplete -= OnInitComplete;
+        WorldManager.InitComplete -= OnInitComplete;
         WorldManager.PublishCurrentRegionId -= ctx => OnRegionChange();
         SceneLoader.LoadComplete -= OnDependencyLoadComplete;
         muteEvent.OnEventRaised -= Mute;
