@@ -81,20 +81,18 @@ public class MixerManager : MonoBehaviour
         LoadingInformation.LoadingStatus?.Invoke("Audio systems initialized successfully.");
         await Unmute();
         // send event for intro sound trigger.
-        introSound.RaiseEvent();
+        introSound?.RaiseEvent();
+        initComplete = true;
     }
     private async void OnRegionChange()
     {
         isDepedencyLoaded = false;
-        if (!initComplete) return;
-        
         // 1 - mute
         Mute();
         
         // 2 - wait until load is complete
-        Debug.Log($"isDependencyLoaded = {isDepedencyLoaded}");
         await UniTask.WaitUntil(() => isDepedencyLoaded);
-        Debug.Log($"isDependencyLoaded = {isDepedencyLoaded}");
+        await UniTask.WaitUntil(() => initComplete);
         
         // 3 - unmute
         await Unmute();
