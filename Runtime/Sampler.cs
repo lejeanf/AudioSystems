@@ -282,7 +282,6 @@ namespace jeanf.audiosystems
 
             // returns a random clip from the given list of audioclips
             return SamplerData;
-
         }
 
         public SamplerData ReturnSamplerDataToPlayFromName(string clipName)
