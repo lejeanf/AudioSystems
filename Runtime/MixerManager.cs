@@ -85,6 +85,8 @@ public class MixerManager : MonoBehaviour
         // send event for intro sound trigger.
         LoadingInformation.LoadingStatus?.Invoke("Audio systems initialized successfully.");
         introSound?.RaiseEvent();
+        await UniTask.WaitForSeconds(.1f);
+        LoadingInformation.LoadingStatus?.Invoke("");
     }
     private async void OnRegionChange()
     {
