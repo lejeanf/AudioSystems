@@ -1,4 +1,5 @@
 using System.Collections;
+using Cysharp.Threading.Tasks;
 using jeanf.EventSystem;
 using jeanf.scenemanagement;
 using UnityEngine;
@@ -22,6 +23,8 @@ public class MixerManager : MonoBehaviour
     private Coroutine _coroutine;
 
     public bool isMuted = true;
+    private bool initComplete = false;
+    private bool isDepedencyLoaded = false;
     
 
     [Header("Listening on:")]
@@ -31,11 +34,14 @@ public class MixerManager : MonoBehaviour
     [SerializeField] private BoolEventChannelSO stethoscopeStateEvent;
     [Header("Broadcasting on:")]
     [SerializeField] private VoidEventChannelSO floorLoadingIsFinishedAndSoundIsUnMuted;
+    [SerializeField] private VoidEventChannelSO introSound;
 
 
     private void Awake()
     {
         mainMixer.updateMode = AudioMixerUpdateMode.UnscaledTime;
+        LoadingInformation.LoadingStatus?.Invoke("Initializing audio systems");
+        Mute();
     }
 
     private void OnEnable() => Subscribe();
@@ -44,20 +50,58 @@ public class MixerManager : MonoBehaviour
     
     private void Subscribe()
     {
-        SceneLoader.IsLoading += SetMixerState;
+        //SceneLoader.IsLoading += SetMixerState;
+        WorldManager.InitComplete += OnInitComplete;
+        WorldManager.PublishCurrentRegionId += ctx => OnRegionChange();
+        SceneLoader.LoadComplete += OnDependencyLoadComplete;
         muteEvent.OnEventRaised += Mute;
-        unmuteEvent.OnEventRaised += Unmute;
+        unmuteEvent.OnEventRaised += OnUnmute;
         stethoscopeStateEvent.OnEventRaised += ConsumeStethoscopeState;
     }
     
     private void Unsubscribe()
     {
-        SceneLoader.IsLoading -= SetMixerState;
+        //SceneLoader.IsLoading -= SetMixerState;
+        WorldManager.InitComplete -= OnInitComplete;
+        WorldManager.PublishCurrentRegionId -= ctx => OnRegionChange();
+        SceneLoader.LoadComplete -= OnDependencyLoadComplete;
         muteEvent.OnEventRaised -= Mute;
-        unmuteEvent.OnEventRaised -= Unmute;
+        unmuteEvent.OnEventRaised -= OnUnmute;
         stethoscopeStateEvent.OnEventRaised -= ConsumeStethoscopeState;
         
         if(_coroutine!= null) StopCoroutine(_coroutine);
+    }
+
+    private void OnDependencyLoadComplete(bool state)
+    {
+        if(!state) return;
+        isDepedencyLoaded = true;
+    }
+
+    private async void OnInitComplete(bool state)
+    {
+        if (!state) return;
+        LoadingInformation.LoadingStatus?.Invoke("Audio systems initialized successfully.");
+        await Unmute();
+        // send event for intro sound trigger.
+        introSound.RaiseEvent();
+    }
+    private async void OnRegionChange()
+    {
+        isDepedencyLoaded = false;
+        if (!initComplete) return;
+        
+        // 1 - mute
+        Mute();
+        
+        // 2 - wait until load is complete
+        await UniTask.WaitUntil(() => isDepedencyLoaded);
+        
+        // 3 - unmute
+        await Unmute();
+        
+        // 4 - elevator sound
+        floorLoadingIsFinishedAndSoundIsUnMuted.RaiseEvent();
     }
 
     private void ConsumeStethoscopeState(bool state)
@@ -66,13 +110,12 @@ public class MixerManager : MonoBehaviour
         mainMixer.TransitionToSnapshots(snapshots, _currentWeights, snapshotTransitionTime);
         Debug.Log($"current weights = [{string.Join(", ", _currentWeights)}] ");
     }
-
     public void ToggleMixerSnapshot()
     {
         isMuted = !isMuted;
         Debug.Log($"isMuted = {isMuted}");
         
-        if(isMuted) Unmute();
+        if(isMuted) Unmute().Forget();
         else
         {
             Mute();
@@ -88,7 +131,7 @@ public class MixerManager : MonoBehaviour
         }
         else
         {
-            Unmute();
+            Unmute().Forget();
         }
     }
 
@@ -97,19 +140,19 @@ public class MixerManager : MonoBehaviour
         mainMixer.TransitionToSnapshots(snapshots, muteWeights, snapshotTransitionTime);
     }
 
-    public void Unmute()
+    public void OnUnmute()
+    {
+        Unmute().Forget();
+    }
+
+    public async UniTask Unmute()
     {
         _currentWeights ??= normalWeights; // assigning default weight in case currentWeight is null.
         
         mainMixer.TransitionToSnapshots(snapshots, _currentWeights, snapshotTransitionTime);
-        _coroutine = StartCoroutine(FloorLoadingIsFinishedAndSoundIsUnMuted(snapshotTransitionTime));
+        await UniTask.WaitForSeconds(snapshotTransitionTime);
     }
 
-    private IEnumerator FloorLoadingIsFinishedAndSoundIsUnMuted(float timeToWait)
-    {
-        yield return new WaitForSecondsRealtime(timeToWait);
-        floorLoadingIsFinishedAndSoundIsUnMuted.RaiseEvent();
-    }
 }
 #if UNITY_EDITOR
 [CustomEditor(typeof(MixerManager))]
