@@ -4,6 +4,7 @@ using jeanf.EventSystem;
 using jeanf.scenemanagement;
 using UnityEngine;
 using UnityEngine.Audio;
+using UnityEngine.Serialization;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -28,14 +29,14 @@ public class MixerManager : MonoBehaviour
     private bool isDepedencyLoaded = false;
 
 
-    [Header("Listening on:")] [SerializeField]
-    private VoidEventChannelSO muteEvent;
+    [FormerlySerializedAs("muteEvent")] [Header("Listening on:")] [SerializeField]
+    private VoidEventChannelSO muteEventSO;
 
     public delegate void MixerStateDelegate();
     public static MixerStateDelegate MuteEvent;
     public static MixerStateDelegate UnMuteEvent;
 
-    [SerializeField] private VoidEventChannelSO unmuteEvent;
+    [FormerlySerializedAs("unmuteEvent")] [SerializeField] private VoidEventChannelSO unmuteEventSO;
     [SerializeField] private BoolEventChannelSO stethoscopeStateEvent;
 
     [Header("Broadcasting on:")] [SerializeField]
@@ -62,10 +63,10 @@ public class MixerManager : MonoBehaviour
         WorldManager.InitComplete += OnInitComplete;
         WorldManager.PublishCurrentRegionId += ctx => OnRegionChange();
         SceneLoader.LoadComplete += OnDependencyLoadComplete;
-        muteEvent.OnEventRaised += Mute;
+        muteEventSO.OnEventRaised += Mute;
         MuteEvent += Mute;
         UnMuteEvent += OnUnmute;
-        unmuteEvent.OnEventRaised += OnUnmute;
+        unmuteEventSO.OnEventRaised += OnUnmute;
         stethoscopeStateEvent.OnEventRaised += ConsumeStethoscopeState;
     }
 
@@ -74,10 +75,10 @@ public class MixerManager : MonoBehaviour
         WorldManager.InitComplete -= OnInitComplete;
         WorldManager.PublishCurrentRegionId -= ctx => OnRegionChange();
         SceneLoader.LoadComplete -= OnDependencyLoadComplete;
-        muteEvent.OnEventRaised -= Mute;
+        muteEventSO.OnEventRaised -= Mute;
         MuteEvent -= Mute;
         UnMuteEvent -= OnUnmute;
-        unmuteEvent.OnEventRaised -= OnUnmute;
+        unmuteEventSO.OnEventRaised -= OnUnmute;
         stethoscopeStateEvent.OnEventRaised -= ConsumeStethoscopeState;
 
         if (_coroutine != null) StopCoroutine(_coroutine);
