@@ -1,3 +1,4 @@
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using jeanf.EventSystem;
 using jeanf.scenemanagement;
@@ -7,6 +8,7 @@ using UnityEngine.Audio;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
+
 public class MixerManager : MonoBehaviour
 {
     public AudioMixer mainMixer;
@@ -24,15 +26,24 @@ public class MixerManager : MonoBehaviour
     public bool isMuted = true;
     private bool initComplete = false;
     private bool isDepedencyLoaded = false;
-    
 
-    [Header("Listening on:")]
-    [SerializeField] private VoidEventChannelSO muteEvent;
+
+    [Header("Listening on:")] [SerializeField]
+    private VoidEventChannelSO muteEvent;
+
+    public delegate void MixerStateDelegate();
+    public static MixerStateDelegate MuteEvent;
+    public static MixerStateDelegate UnMuteEvent;
+
     [SerializeField] private VoidEventChannelSO unmuteEvent;
     [SerializeField] private BoolEventChannelSO stethoscopeStateEvent;
-    [Header("Broadcasting on:")]
-    [SerializeField] private VoidEventChannelSO floorLoadingIsFinishedAndSoundIsUnMuted;
+
+    [Header("Broadcasting on:")] [SerializeField]
+    private VoidEventChannelSO floorLoadingIsFinishedAndSoundIsUnMuted;
+
     [SerializeField] private VoidEventChannelSO introSound;
+    
+    
 
 
     private void Awake()
@@ -45,32 +56,36 @@ public class MixerManager : MonoBehaviour
     private void OnEnable() => Subscribe();
     private void OnDisable() => Unsubscribe();
     private void OnDestroy() => Unsubscribe();
-    
+
     private void Subscribe()
     {
         WorldManager.InitComplete += OnInitComplete;
         WorldManager.PublishCurrentRegionId += ctx => OnRegionChange();
         SceneLoader.LoadComplete += OnDependencyLoadComplete;
         muteEvent.OnEventRaised += Mute;
+        MuteEvent += Mute;
+        UnMuteEvent += OnUnmute;
         unmuteEvent.OnEventRaised += OnUnmute;
         stethoscopeStateEvent.OnEventRaised += ConsumeStethoscopeState;
     }
-    
+
     private void Unsubscribe()
     {
         WorldManager.InitComplete -= OnInitComplete;
         WorldManager.PublishCurrentRegionId -= ctx => OnRegionChange();
         SceneLoader.LoadComplete -= OnDependencyLoadComplete;
         muteEvent.OnEventRaised -= Mute;
+        MuteEvent -= Mute;
+        UnMuteEvent -= OnUnmute;
         unmuteEvent.OnEventRaised -= OnUnmute;
         stethoscopeStateEvent.OnEventRaised -= ConsumeStethoscopeState;
-        
-        if(_coroutine!= null) StopCoroutine(_coroutine);
+
+        if (_coroutine != null) StopCoroutine(_coroutine);
     }
 
     private void OnDependencyLoadComplete(bool state)
     {
-        if(!state) return;
+        if (!state) return;
         isDepedencyLoaded = true;
     }
 
@@ -81,27 +96,28 @@ public class MixerManager : MonoBehaviour
         await UniTask.WaitUntil(() => isDepedencyLoaded);
         await Unmute();
         await UniTask.WaitForSeconds(.1f);
-        
+
         // send event for intro sound trigger.
         LoadingInformation.LoadingStatus?.Invoke("Audio systems initialized successfully.");
         introSound?.RaiseEvent();
         await UniTask.WaitForSeconds(.1f);
         LoadingInformation.LoadingStatus?.Invoke("");
     }
+
     private async void OnRegionChange()
     {
         isDepedencyLoaded = false;
         // 1 - mute
         Mute();
-        
+
         // 2 - wait until load is complete
         await UniTask.WaitUntil(() => isDepedencyLoaded);
         await UniTask.WaitUntil(() => initComplete);
-        
+
         // 3 - unmute
         await Unmute();
         await UniTask.WaitForSeconds(.1f);
-        
+
         // 4 - elevator sound
         floorLoadingIsFinishedAndSoundIsUnMuted.RaiseEvent();
     }
@@ -112,12 +128,13 @@ public class MixerManager : MonoBehaviour
         mainMixer.TransitionToSnapshots(snapshots, _currentWeights, snapshotTransitionTime);
         Debug.Log($"current weights = [{string.Join(", ", _currentWeights)}] ");
     }
+
     public void ToggleMixerSnapshot()
     {
         isMuted = !isMuted;
         Debug.Log($"isMuted = {isMuted}");
-        
-        if(isMuted) Unmute().Forget();
+
+        if (isMuted) Unmute().Forget();
         else
         {
             Mute();
@@ -136,7 +153,6 @@ public class MixerManager : MonoBehaviour
             Unmute().Forget();
         }
     }
-
     public void Mute()
     {
         mainMixer.TransitionToSnapshots(snapshots, muteWeights, snapshotTransitionTime);
