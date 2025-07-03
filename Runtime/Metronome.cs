@@ -1,36 +1,69 @@
-using jeanf.propertyDrawer;
 using UnityEngine;
+using jeanf.EventSystem;
+using UnityEngine.Audio;
 
 namespace jeanf.audiosystems
 {
-        public class metronome : Sampler
-        {
-            [ReadOnly] [SerializeField] private float _currentTime;
-            [SerializeField] [Range(0, 200)] private float bpm;
-            [ReadOnly] [Range(0, 200)] [SerializeField] float smoothedBpm = 0f;
-            [ReadOnly] [SerializeField] private float beats;
+        public class Metronome : MonoBehaviour
+        { 
+            [Header("Listening on:")] [SerializeField]
+            private BoolEventChannelSO GeneralPauseEvent;
+            public AudioResource[] clips = new AudioResource[2];
+            public AudioSource[] audioSources = new AudioSource[2];
+            private double nextEventTime;
+            private int flip = 0; 
+            private bool running = false;  
             
+            [SerializeField] private double time;
+            [SerializeField] [Range(0, 200)] public float bpm;
+            [SerializeField] [Range(0, 2)] public float lookAhead;
+            [Range(0, 200)] [SerializeField] private float smoothedBpm = 0f;
+            [SerializeField] private float beats;
+           
             [SerializeField] private bool isSmoothing = false;
             private float[] bpmValues;
             private int currentIndex = 0;
             [SerializeField] [Range(2, 10)] private int smoothingWindowSize = 5; // Number of samples to average
-
-            private void Awake()
+            private void OnEnable()
             {
-                _currentTime = 0f;
+                GeneralPauseEvent.OnEventRaised += PauseAudio;
+            }
+
+            private void OnDisable() => Unsubscribe();
+            private void OnDestroy() => Unsubscribe();
+
+            private void Unsubscribe()
+            {
+                GeneralPauseEvent.OnEventRaised -= PauseAudio;
+            }
+            void Start()
+            {
+         //    _currentTime = 0f;
                 bpm = 140f;
+                nextEventTime = AudioSettings.dspTime + 2.0f; 
                 
                 bpmValues = new float[smoothingWindowSize];
                 for (int i = 0; i < smoothingWindowSize; i++)
                 {
                     bpmValues[i] = bpm;
                 }
-                
-                audioSource = GetComponent<AudioSource>();
+                lookAhead = 0.5f;
+                for (int i = 0; i < 2; i++)
+                {
+                    audioSources[i].resource = clips[i];
+                }
+                running = true;
             }
 
-            private void FixedUpdate()
+            void Update()
             {
+                if (!running)
+                {
+                    return;
+                }
+                
+                time = AudioSettings.dspTime;
+                
                 if (isSmoothing)
                 {
                     // Update the circular buffer with the current BPM
@@ -52,13 +85,24 @@ namespace jeanf.audiosystems
                 {
                     beats = 60f / bpm;
                 }
-                _currentTime += Time.fixedDeltaTime; // Increment time by fixed delta
 
-                while (_currentTime >= beats) // Ensure no time drift
+                if (time + lookAhead > nextEventTime)  // schedule first sound 1 second ahead of time
                 {
-                    _currentTime -= beats; // Subtract the interval
-                    PlayAudioClip(); // Trigger your audio
+                    audioSources[flip].PlayScheduled(nextEventTime);
+                    nextEventTime += beats; // schedule next event 
+
+                    flip = 1 - flip; // flip between audiosources so they have time to preload the next sound.
                 }
+            }
+
+            void PauseAudio(bool state)
+            {
+                for (int i = 0; i < 2; i++)
+                {
+                    audioSources[i].Stop();
+                }
+
+                running = !state;
             }
         }
 }
