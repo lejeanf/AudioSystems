@@ -1,6 +1,6 @@
 AudioSystems
 
-Lightweight Audio system for Unity. Contains resources for implementing interactive and scripted audio behaviour using scriptable objects and sample lists. Developed in collaboration with [Daniel Villegas Velez](https://github.com/dvvii)",
+Lightweight Audio system for Unity. Contains resources for implementing interactive and scripted audio behaviour using scriptable objects and sample lists. Developed in collaboration with [Daniel Villegas Velez](https://github.com/dvvii).
 
 
 Components: 
