@@ -20,6 +20,8 @@ public class MixerManager : MonoBehaviour
     private float[] _currentWeights; // either normal or stethoscope 
 
     [SerializeField] private float snapshotTransitionTime = 1.0f;
+    [SerializeField] private float stethoscopeTransitionTime = 0.5f;
+    
     [SerializeField] private float TimeToWait = 10.0f;
 
     private Coroutine _coroutine;
@@ -126,7 +128,7 @@ public class MixerManager : MonoBehaviour
     private void ConsumeStethoscopeState(bool state)
     {
         _currentWeights = state ? stethoscopeWeights : normalWeights;
-        mainMixer.TransitionToSnapshots(snapshots, _currentWeights, snapshotTransitionTime);
+        mainMixer.TransitionToSnapshots(snapshots, _currentWeights, stethoscopeTransitionTime);
         Debug.Log($"current weights = [{string.Join(", ", _currentWeights)}] ");
     }
 
