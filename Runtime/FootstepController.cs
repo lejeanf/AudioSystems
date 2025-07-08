@@ -42,11 +42,11 @@ namespace jeanf.audiosystems
         private void Update()
         {
             if (!_isMoving) return;
-            DetectGround();
             
            _time = AudioSettings.dspTime;
             if (_time - _timeSinceLastFootstep >= Random.Range(minTimeBetweenFootsteps, maxTimeBetweenFootsteps))
             {
+                DetectGround();
                 FootstepSound();
                 _timeSinceLastFootstep = _time; 
 //                Debug.Log($"time: {time} timeSinceLastFootstep: {timeSinceLastFootstep} stereoPan: {stereoPan}");
