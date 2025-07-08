@@ -53,22 +53,26 @@ namespace jeanf.audiosystems
             }
         }
 
+        private string _previousMaterial; // Add this field at class level
+
         private void DetectGround()
         {
-             // Cast a ray downward to detect the ground
             RaycastHit hit;
             if (Physics.Raycast(transform.position, Vector3.down, out hit, rayDistance, groundLayer))
             {
-                _material = hit.collider.tag; // Get the tag of the object we hit
+                _material = hit.collider.tag; 
+
+                if (_material != _previousMaterial)
+                {
+                    audioSource.resource = _material switch
+                    {
+                        "Concrete" => concreteSounds,
+                        "Linoleum" => linoleumSounds,
+                        _ => linoleumSounds
+                    };
+                    _previousMaterial = _material;
+                }
             }
-            //  Debug.Log($"material: {_material}"); 
-            audioSource.resource = _material switch
-            {
-                "Concrete" => concreteSounds,
-                "Linoleum" => linoleumSounds,
-                _ => linoleumSounds
-            };
-        //    Debug.DrawRay(transform.position, Vector3.down * rayDistance, Color.red);
         }
         private void FootstepSound()
         {
