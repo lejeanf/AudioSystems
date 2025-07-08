@@ -1,6 +1,6 @@
 {
   "name": "fr.jeanf.audiosystems",
-  "version": "0.2.1",
+  "version": "0.2.2,
   "displayName": "Audio Systems",
   "description": "Lightweight Audio system for Unity. Contains resources for implementing interactive and scripted audio behaviour using scriptable objects and sample lists. Developed in collaboration with [Daniel Villegas Velez](https://github.com/dvvii)",
   "unity": "2021.3",
