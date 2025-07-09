@@ -45,6 +45,7 @@ public class MixerManager : MonoBehaviour
     private VoidEventChannelSO floorLoadingIsFinishedAndSoundIsUnMuted;
 
     [SerializeField] private VoidEventChannelSO introSound;
+    [SerializeField] private VoidEventChannelSO GeneralPauseEvent;
     
     
 
@@ -70,6 +71,8 @@ public class MixerManager : MonoBehaviour
         UnMuteEvent += OnUnmute;
         unmuteEventSO.OnEventRaised += OnUnmute;
         stethoscopeStateEvent.OnEventRaised += ConsumeStethoscopeState;
+        GeneralPauseEvent.OnEventRaised += Mute;
+        
     }
 
     private void Unsubscribe()
@@ -82,6 +85,8 @@ public class MixerManager : MonoBehaviour
         UnMuteEvent -= OnUnmute;
         unmuteEventSO.OnEventRaised -= OnUnmute;
         stethoscopeStateEvent.OnEventRaised -= ConsumeStethoscopeState;
+        GeneralPauseEvent.OnEventRaised -= OnUnmute;
+        
 
         if (_coroutine != null) StopCoroutine(_coroutine);
     }
