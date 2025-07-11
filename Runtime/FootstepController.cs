@@ -13,6 +13,7 @@ namespace jeanf.audiosystems
         [SerializeField] private AudioResource linoleumSounds;
         [SerializeField] private AudioResource concreteSounds;
         private string _material;
+        private string _previousMaterial;
         private bool _isMoving; 
         private double _time;
         private double _timeSinceLastFootstep;
@@ -53,7 +54,6 @@ namespace jeanf.audiosystems
             }
         }
 
-        private string _previousMaterial; // Add this field at class level
 
         private void DetectGround()
         {
