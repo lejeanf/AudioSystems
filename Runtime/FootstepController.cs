@@ -5,23 +5,27 @@ using UnityEngine.Audio;
 namespace jeanf.audiosystems
 {
     public class FootstepController : MonoBehaviour {
-        public float minTimeBetweenFootsteps = 0.4f; 
-        public float maxTimeBetweenFootsteps = 0.5f;
 
-        [SerializeField] private AudioSource audioSource;
         [SerializeField] private BoolEventChannelSO isMovingChannel;
-        [SerializeField] private AudioResource linoleumSounds;
-        [SerializeField] private AudioResource concreteSounds;
-        private string _material;
-        private string _previousMaterial;
-        private bool _isMoving; 
-        private double _time;
-        private double _timeSinceLastFootstep;
-        [SerializeField] private float rayDistance = 0.3f; // Distance to check below the player
-        [SerializeField] private LayerMask groundLayer; // Layer mask for ground objects
+        [SerializeField] private BoolEventChannelSO GeneralPauseEvent;
+        
 
+        public float minTimeBetweenFootsteps = 0.5f; 
+        public float maxTimeBetweenFootsteps = 0.55f;
+        [SerializeField] private LayerMask groundLayer; // Layer mask for ground objects
+        [SerializeField] private float rayDistance = 0.3f; // Distance to check below the player
         [SerializeField] [Range(-1,1)] private float stereoPan = 0.3f;
     
+        [SerializeField] private AudioSource audioSource;
+        [SerializeField] private AudioResource linoleumSounds;
+        [SerializeField] private AudioResource concreteSounds;
+        
+        private string _previousMaterial;
+        private string _material;
+        private bool _isMoving; 
+        private bool _isPaused;
+        private double _time;
+        private double _timeSinceLastFootstep;
 
         private void OnEnable() => Subscribe();
 
@@ -31,12 +35,14 @@ namespace jeanf.audiosystems
 
         private void Subscribe()
         {
-            isMovingChannel.OnEventRaised += ctx => _isMoving = ctx;
+           isMovingChannel.OnEventRaised += ctx => _isMoving = ctx;
+           GeneralPauseEvent.OnEventRaised += ctx => _isPaused = ctx;
         }
 
         private void Unsubscribe()
         {
-            isMovingChannel.OnEventRaised -= ctx => _isMoving = ctx;
+          isMovingChannel.OnEventRaised -= ctx => _isMoving = ctx;
+          GeneralPauseEvent.OnEventRaised -= ctx => _isPaused = ctx;
         }
    
 
