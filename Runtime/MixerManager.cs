@@ -20,9 +20,9 @@ public class MixerManager : MonoBehaviour
     private float[] _currentWeights; // either normal or stethoscope 
 
     [SerializeField] private float snapshotTransitionTime = 1.0f;
-    [SerializeField] private float stethoscopeTransitionTime = 0.5f;
+    [SerializeField] private float stethoscopeTransitionTime = 1.0f;
     
-    [SerializeField] private float TimeToWait = 10.0f;
+    [SerializeField] private float delayTimeForIntro = 0.5f;
 
     private Coroutine _coroutine;
 
@@ -45,7 +45,6 @@ public class MixerManager : MonoBehaviour
     private VoidEventChannelSO floorLoadingIsFinishedAndSoundIsUnMuted;
 
     [SerializeField] private VoidEventChannelSO introSound;
-    [SerializeField] private VoidEventChannelSO GeneralPauseEvent;
     
     
 
@@ -71,7 +70,6 @@ public class MixerManager : MonoBehaviour
         UnMuteEvent += OnUnmute;
         unmuteEventSO.OnEventRaised += OnUnmute;
         stethoscopeStateEvent.OnEventRaised += ConsumeStethoscopeState;
-        GeneralPauseEvent.OnEventRaised += Mute;
         
     }
 
@@ -85,9 +83,6 @@ public class MixerManager : MonoBehaviour
         UnMuteEvent -= OnUnmute;
         unmuteEventSO.OnEventRaised -= OnUnmute;
         stethoscopeStateEvent.OnEventRaised -= ConsumeStethoscopeState;
-        GeneralPauseEvent.OnEventRaised -= OnUnmute;
-        
-
         if (_coroutine != null) StopCoroutine(_coroutine);
     }
 
@@ -102,14 +97,12 @@ public class MixerManager : MonoBehaviour
         initComplete = state;
         if (!state) return;
         await UniTask.WaitUntil(() => isDepedencyLoaded);
+        LoadingInformation.LoadingStatus?.Invoke("Audio systems initialized successfully.");
         await Unmute();
-        await UniTask.WaitForSeconds(.1f);
 
         // send event for intro sound trigger.
-        LoadingInformation.LoadingStatus?.Invoke("Audio systems initialized successfully.");
+        await UniTask.WaitForSeconds(snapshotTransitionTime + delayTimeForIntro);
         introSound?.RaiseEvent();
-        await UniTask.WaitForSeconds(.1f);
-        LoadingInformation.LoadingStatus?.Invoke("");
     }
 
     private async void OnRegionChange()
