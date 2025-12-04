@@ -11,13 +11,13 @@ namespace jeanf.audiosystems
         RoundRobin     // Cycle through all clips once before repeating
     }
 
-    [RequireComponent(typeof(AudioSource))]
     public class BpmSampler : MonoBehaviour
     {
 
         [SerializeField] public bool isDebug = false;
 
         [Header("Clip Bank")]
+        [SerializeField] public AudioSource audioSource;
         [SerializeField] private AudioClip[] clips;
         [SerializeField] private PlaybackMode playbackMode = PlaybackMode.Random;
         [SerializeField] [Range(60f, 200f)] public float bpm = 120f;
