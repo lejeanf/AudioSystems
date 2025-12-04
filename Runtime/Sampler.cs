@@ -70,7 +70,7 @@ namespace jeanf.audiosystems
 
          private void ClearLocalData()
          {
-             if (samplerDataList == null) return;
+             if (samplerDataList is null) return;
              
              samplerDataList.Clear();
              samplerDataList.TrimExcess();
@@ -81,7 +81,7 @@ namespace jeanf.audiosystems
 
          private void StopAudioAsync()
          {
-             if (audioSource == null) return;
+             if (audioSource is null) return;
              try
              {
                  if (audioSource.isPlaying)
@@ -123,7 +123,7 @@ namespace jeanf.audiosystems
  
          public void PlayAudioClip()
          {
-             if (samplerDataList == null) return;
+             if (samplerDataList is null) return;
              currentSamplerData = ReturnSamplerDataToPlay(samplerDataList);
 
              if (currentSamplerData is null)
@@ -167,8 +167,8 @@ namespace jeanf.audiosystems
          
         public void PlayAudioClip(SamplerData samplerData)
         {
-            if(samplerData == null) return;
-            if(samplerData.audioClip == null) return;
+            if(samplerData is null) return;
+            if(samplerData.audioClip is null) return;
             audioSource.volume = samplerData.volume;
             audioSource.clip = samplerData.audioClip;
             audioSource.Stop();
@@ -191,8 +191,8 @@ namespace jeanf.audiosystems
         {
             var _samplerData = ReturnSamplerDataToPlay(samplerDataList);
             
-            if(_samplerData == null) return;
-            if(_samplerData.audioClip == null) return;
+            if(_samplerData is null) return;
+            if(_samplerData.audioClip is null) return;
 
                 audioSource.volume = _samplerData.volume;
             audioSource.clip = _samplerData.audioClip;
@@ -224,7 +224,7 @@ namespace jeanf.audiosystems
                  return 0;
              }
              
-             if (currentSamplerData == null) currentSamplerData = samplerDataList[0];
+             if (currentSamplerData is null) currentSamplerData = samplerDataList[0];
 
              audioSource.volume = currentSamplerData.volume;
              audioSource.clip = currentSamplerData.audioClip;

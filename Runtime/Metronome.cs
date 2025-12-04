@@ -97,12 +97,22 @@ namespace jeanf.audiosystems
 
             void PauseAudio(bool state)
             {
-                for (int i = 0; i < 2; i++)
+                if (state)
                 {
-                    audioSources[i].Stop();
+                    // Pausing
+                    for (int i = 0; i < 2; i++)
+                    {
+                        audioSources[i].Stop();
+                    }
+                    running = false;
                 }
-
-                running = !state;
+                else
+                {
+                    // Resuming - recalculate next event time to prevent drift
+                    time = AudioSettings.dspTime;
+                    nextEventTime = time + lookAhead;
+                    running = true;
+                }
             }
         }
 }

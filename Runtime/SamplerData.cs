@@ -102,7 +102,7 @@ namespace jeanf.audiosystems
             DrawDefaultInspector();
             var samplerData = (SamplerData)target;
             if (samplerData.isPlayOneShot) return;
-            if (samplerData.audioClip == null) return;
+            if (samplerData.audioClip is null) return;
 
             if (previousLoopingData.playFrom != samplerData.playFrom ||
                 previousLoopingData.loopFrom != samplerData.loopFrom ||

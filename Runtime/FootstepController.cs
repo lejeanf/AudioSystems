@@ -48,7 +48,7 @@ namespace jeanf.audiosystems
 
         private void Update()
         {
-            if (!_isMoving) return;
+            if (!_isMoving || _isPaused) return;
             
            _time = AudioSettings.dspTime;
             if (_time - _timeSinceLastFootstep >= Random.Range(minTimeBetweenFootsteps, maxTimeBetweenFootsteps))
@@ -82,7 +82,6 @@ namespace jeanf.audiosystems
         }
         private void FootstepSound()
         {
-            if (_isPaused) return;
             if (!audioSource.isPlaying)
             {
                 audioSource.panStereo = stereoPan;
