@@ -19,7 +19,7 @@ namespace jeanf.audiosystems
         [SerializeField] private float materialCacheDuration = 0.2f; // How long to cache ground material
         
         [Header("Audio")]
-        [SerializeField] [Range(-1,1)] private float stereoPan = 0.3f;
+        [SerializeField] [Range(-2,2)] private float stereoPan = 1.5f;
         [SerializeField] private AudioSource audioSource;
         [SerializeField] private AudioResource linoleumSounds;
         [SerializeField] private AudioResource concreteSounds;
@@ -33,6 +33,7 @@ namespace jeanf.audiosystems
         private bool _isPaused;
         private double _time;
         private double _timeSinceLastFootstep;
+        private float _audioSourcePositionY;
         
         // Debug tracking variables
         private int _raycastCount = 0;
@@ -48,6 +49,7 @@ namespace jeanf.audiosystems
 
         private void Start()
         {
+                _audioSourcePositionY = audioSource.transform.localPosition.y;
             if (isDebug)
             {
                 _debugStartTime = Time.time;
@@ -152,9 +154,9 @@ namespace jeanf.audiosystems
         {
             if (!audioSource.isPlaying)
             {
-                audioSource.panStereo = stereoPan;
+                audioSource.transform.localPosition = new Vector3(stereoPan, _audioSourcePositionY, 0f);
                 audioSource.Play();
-                stereoPan *= -1f;
+                stereoPan = -stereoPan;
                 
                 if (isDebug)
                 {
