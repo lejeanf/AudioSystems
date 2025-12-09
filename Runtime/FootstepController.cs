@@ -5,13 +5,13 @@ using UnityEngine.Audio;
 namespace jeanf.audiosystems
 {
     public class FootstepController : MonoBehaviour {
-
+        [Header("Debug")]
+        [SerializeField] private bool isDebug = false;
+ 
         [SerializeField] private BoolEventChannelSO isMovingChannel;
         [SerializeField] private BoolEventChannelSO GeneralPauseEvent;
-        
 
-        [SerializeField] public float minTimeBetweenFootsteps = 0.45f; 
-        [SerializeField] public float maxTimeBetweenFootsteps = 0.55f;
+        [SerializeField] public float footstepInterval = 0.5f; 
         
         [Header("Ground Detection")]
         [SerializeField] private LayerMask groundLayer; // Layer mask for ground objects
@@ -24,9 +24,7 @@ namespace jeanf.audiosystems
         [SerializeField] private AudioResource linoleumSounds;
         [SerializeField] private AudioResource concreteSounds;
         
-        [Header("Debug")]
-        [SerializeField] private bool isDebug = false;
-        
+       
         private string _previousMaterial;
         private string _material;
         private string _cachedMaterial;
@@ -75,9 +73,9 @@ namespace jeanf.audiosystems
             if (!_isMoving || _isPaused) return;
             
            _time = AudioSettings.dspTime;
-            if (_time - _timeSinceLastFootstep >= Random.Range(minTimeBetweenFootsteps, maxTimeBetweenFootsteps))
+            if (_time - _timeSinceLastFootstep >= footstepInterval)
             {
-                DetectGroundOptimized();
+                DetectGround();
                 FootstepSound();
                 _timeSinceLastFootstep = _time; 
 //                Debug.Log($"time: {time} timeSinceLastFootstep: {timeSinceLastFootstep} stereoPan: {stereoPan}");
@@ -85,7 +83,7 @@ namespace jeanf.audiosystems
         }
 
 
-        private void DetectGroundOptimized()
+        private void DetectGround()
         {
             // Use cached material if still valid
             if (Time.time - _lastMaterialCheckTime < materialCacheDuration && !string.IsNullOrEmpty(_cachedMaterial))
@@ -116,8 +114,9 @@ namespace jeanf.audiosystems
                 {
                     _raycastCount++;
                     float elapsedTime = Time.time - _debugStartTime;
-                    float raycastsPerSecond = _raycastCount / elapsedTime;
-                    Debug.Log($"[FootstepController] Raycast #{_raycastCount} - Material: {_material} | Rate: {raycastsPerSecond:F2}/sec");
+                    float avgTimeBetweenRaycasts = elapsedTime / _raycastCount;
+                    float avgTimeBetweenRaycastsMs = avgTimeBetweenRaycasts * 1000f;
+                    Debug.Log($"[FootstepController] Raycast #{_raycastCount} - Material: {_material} | Avg interval: {avgTimeBetweenRaycastsMs:F0}ms");
                 }
             }
             else if (isDebug)
