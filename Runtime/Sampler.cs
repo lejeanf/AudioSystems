@@ -12,6 +12,7 @@ namespace jeanf.audiosystems
 {
      public class Sampler : MonoBehaviour, IValidatable
      { 
+        [SerializeField] public bool isDebug;
          private bool _isValid = true;
          public bool IsValid
          {
@@ -102,7 +103,7 @@ namespace jeanf.audiosystems
              if (!audioSource.isPlaying) return;  // audioSource.time returns 0 if resource is ARC. How to fix?
              {
                  var timeTag = audioSource.time;
-             //    Debug.Log($"time: {audioSource.time}. looping from {currentSamplerData.loopFrom} looping until: {currentSamplerData.loopTo} looping is set to {isLooping}");
+             if (isDebug) Debug.Log($"time: {audioSource.time}. looping from {currentSamplerData.loopFrom} looping until: {currentSamplerData.loopTo} looping is set to {isLooping}");
 
                  if (isLooping != true) return;
                  if (timeTag >= currentSamplerData.loopTo) audioSource.time = currentSamplerData.loopFrom;
@@ -128,12 +129,12 @@ namespace jeanf.audiosystems
 
              if (currentSamplerData is null)
              {
-                 Debug.Log($"no currentSamplerData for {this}");
+                if (isDebug) Debug.Log($"no currentSamplerData for {this}");
                  return;
              }
              if (audioSource is null) 
              {
-                 Debug.Log($"no audioSource for {this}");
+                 if (isDebug) Debug.Log($"no audioSource for {this}");
                  return;
              }
              if (samplerDataList.Count <= 0)
@@ -161,7 +162,7 @@ namespace jeanf.audiosystems
              {
                  audioSource.Play();
                  isLooping = true;
-              //   Debug.Log($"ready to play? {_readyToPlay} and looping? {isLooping}");
+                 if (isDebug) Debug.Log($"ready to play? {_readyToPlay} and looping? {isLooping}");
              }
          }
          
@@ -210,7 +211,7 @@ namespace jeanf.audiosystems
                 audioSource.Play();
                 isLooping = true;
             }
-            //Debug.Log($"Playing clip: {audioSource.clip}, its length is {audioSource.clip.length}");
+            if (isDebug) Debug.Log($"Playing clip: {audioSource.clip}, its length is {audioSource.clip.length}");
         }
 
          public float PlayThisAudioClip(string clipName) => PlayAudioClip(samplerDataList, clipName);
@@ -220,7 +221,7 @@ namespace jeanf.audiosystems
              
              if (samplerDataList.Count == 0)
              {
-                 //Debug.Log("audioclip not loaded; list with clipname", this);
+                 if (isDebug) Debug.Log("audioclip not loaded; list with clipname", this);
                  return 0;
              }
              
@@ -242,8 +243,8 @@ namespace jeanf.audiosystems
                  audioSource.Play();
                  isLooping = true;
              } 
-             // Debug.Log($"we're going to play {clipName}", this);
-             // Debug.Log($"Sampler playing: {audioSource.clip} in {currentSamplerData}. Looping between {currentSamplerData.loopFrom} to {currentSamplerData.loopTo}", this);
+             if (isDebug) Debug.Log($"we're going to play {clipName}", this);
+             if (isDebug) Debug.Log($"Sampler playing: {audioSource.clip} in {currentSamplerData}. Looping between {currentSamplerData.loopFrom} to {currentSamplerData.loopTo}", this);
                     
              var time = currentSamplerData.audioClip.length;
              return time;
@@ -259,7 +260,7 @@ namespace jeanf.audiosystems
              if (currentSamplerData.isPlayOneShot) return;
              audioSource.time = currentSamplerData.playOut;
              audioSource.Play();
-           //  Debug.Log($"Playing {currentSamplerData.slug}. isLooping is {isLooping}. PlayOut is {currentSamplerData.playOut}, isPlayOneShot? {currentSamplerData.isPlayOneShot}", this);
+             if (isDebug) Debug.Log($"Playing {currentSamplerData.slug}. isLooping is {isLooping}. PlayOut is {currentSamplerData.playOut}, isPlayOneShot? {currentSamplerData.isPlayOneShot}", this);
          }
 
          public void UpdateListOfClips(List<SamplerData> newAudioClips)
@@ -273,7 +274,7 @@ namespace jeanf.audiosystems
         {
             if (samplerDataList.Count == 0)
             {
-                Debug.Log("SamplerData list is empty");
+              if (isDebug) Debug.Log("SamplerData list is empty");
                 return null;
             }
 
