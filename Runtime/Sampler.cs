@@ -101,11 +101,13 @@ namespace jeanf.audiosystems
          {
              if (!_readyToPlay) return;
              if (!audioSource.isPlaying) return;  // audioSource.time returns 0 if resource is ARC. How to fix?
+             if (isLooping != true) return;
+             // The loop window lives on currentSamplerData; without it there is nothing to snap to.
+             if (currentSamplerData == null) return;
              {
                  var timeTag = audioSource.time;
-             if (isDebug) Debug.Log($"time: {audioSource.time}. looping from {currentSamplerData.loopFrom} looping until: {currentSamplerData.loopTo} looping is set to {isLooping}");
+                 if (isDebug) Debug.Log($"time: {audioSource.time}. looping from {currentSamplerData.loopFrom} looping until: {currentSamplerData.loopTo} looping is set to {isLooping}");
 
-                 if (isLooping != true) return;
                  if (timeTag >= currentSamplerData.loopTo) audioSource.time = currentSamplerData.loopFrom;
              }
          }
@@ -155,6 +157,9 @@ namespace jeanf.audiosystems
 
              if (currentSamplerData.isPlayOneShot || samplerDataList.Count > 1)
              {
+                 // A previous looping clip must not leave its loop window armed for this one-shot,
+                 // or Update snaps the playhead back every frame and the clip never audibly plays.
+                 isLooping = false;
                  audioSource.loop = false;
                  audioSource.Play();
              }
@@ -170,6 +175,8 @@ namespace jeanf.audiosystems
         {
             if(samplerData is null) return;
             if(samplerData.audioClip is null) return;
+            // Update reads the loop window off currentSamplerData, so it has to track what is playing.
+            currentSamplerData = samplerData;
             audioSource.volume = samplerData.volume;
             audioSource.clip = samplerData.audioClip;
             audioSource.Stop();
@@ -178,6 +185,7 @@ namespace jeanf.audiosystems
 
             if (samplerData.isPlayOneShot)
             {
+                isLooping = false;
                 audioSource.loop = false;
                 audioSource.Play();
             }
@@ -191,11 +199,14 @@ namespace jeanf.audiosystems
         public void PlayAudioClip(List<SamplerData> samplerDataList)
         {
             var _samplerData = ReturnSamplerDataToPlay(samplerDataList);
-            
+
             if(_samplerData is null) return;
             if(_samplerData.audioClip is null) return;
 
-                audioSource.volume = _samplerData.volume;
+            // Update reads the loop window off currentSamplerData; leaving it stale (or null) here
+            // meant looping picks from this list threw in Update every frame.
+            currentSamplerData = _samplerData;
+            audioSource.volume = _samplerData.volume;
             audioSource.clip = _samplerData.audioClip;
             audioSource.Stop();
             audioSource.time = _samplerData.playFrom;
@@ -203,6 +214,7 @@ namespace jeanf.audiosystems
 
             if (_samplerData.isPlayOneShot)
             {
+                isLooping = false;
                 audioSource.loop = false;
                 audioSource.Play();
             }
@@ -235,6 +247,7 @@ namespace jeanf.audiosystems
 
              if (currentSamplerData.isPlayOneShot)
              {
+                 isLooping = false;
                  audioSource.loop = false;
                  audioSource.Play();
              }
@@ -242,7 +255,7 @@ namespace jeanf.audiosystems
              {
                  audioSource.Play();
                  isLooping = true;
-             } 
+             }
              if (isDebug) Debug.Log($"we're going to play {clipName}", this);
              if (isDebug) Debug.Log($"Sampler playing: {audioSource.clip} in {currentSamplerData}. Looping between {currentSamplerData.loopFrom} to {currentSamplerData.loopTo}", this);
                     

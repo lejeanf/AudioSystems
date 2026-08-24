@@ -33,15 +33,25 @@ namespace jeanf.audiosystems
         public void OnValidate()
         {
             if (Selection.activeObject != this) return;
+
+            foreach (var issue in SamplerDataValidation.Validate(this))
+            {
+                var message = $"[SamplerData] {name}: {issue.Message}";
+                if (issue.IsError) Debug.LogError(message, this);
+                else Debug.LogWarning(message, this);
+            }
+
+            if (audioClip == null) return;
             if (string.IsNullOrEmpty(slug)) slug = audioClip.name;
-            
+
             ValidateData();
         }
 
         public LoopingData ValidateData()
         {
             if (isPlayOneShot) return null;
-            
+            if (audioClip == null) return null;
+
             playFrom = Mathf.Clamp(FindNearestZeroCrossing(audioClip, playFrom), 0, loopTo);
             loopFrom = Mathf.Clamp(FindNearestZeroCrossing(audioClip, loopFrom), playFrom, loopTo);
             loopTo = Mathf.Clamp(FindNearestZeroCrossing(audioClip, loopTo), loopFrom, playOut);
