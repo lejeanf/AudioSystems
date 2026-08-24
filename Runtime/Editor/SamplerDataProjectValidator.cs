@@ -11,7 +11,7 @@ namespace jeanf.audiosystems
     /// </summary>
     public static class SamplerDataProjectValidator
     {
-        [MenuItem("Tools/Audio Systems/Validate SamplerData Assets")]
+        [MenuItem("Tools/Jeanf/Audio Systems/Validate SamplerData Assets")]
         public static void ValidateAllFromMenu()
         {
             int total = 0;
