@@ -92,11 +92,37 @@ public class MixerManager : MonoBehaviour
         isDepedencyLoaded = true;
     }
 
+    /// <summary>
+    /// How long a mute may wait for the load-complete signal before unmuting anyway. A region
+    /// change that needs no scene loads (or a LoadComplete that fires before the flag reset)
+    /// never re-raises the signal - without this fallback the mixer then stays on the Muted
+    /// snapshot (Master at -80 dB) forever and the entire game goes silent.
+    /// </summary>
+    [SerializeField] private float unmuteFallbackTimeout = 10f;
+
+    /// <summary>True while the mixer sits on (or transitions to) the Muted snapshot.</summary>
+    public bool IsCurrentlyMuted { get; private set; } = true;
+
+    private async UniTask WaitForDependencyLoadOrTimeout()
+    {
+        float start = Time.unscaledTime;
+        while (!isDepedencyLoaded && Time.unscaledTime - start < unmuteFallbackTimeout)
+        {
+            await UniTask.Yield();
+        }
+
+        if (!isDepedencyLoaded)
+        {
+            Debug.LogWarning($"[MixerManager] No load-complete signal after {unmuteFallbackTimeout}s - " +
+                             "unmuting anyway so the game does not stay silent.", this);
+        }
+    }
+
     private async void OnInitComplete(bool state)
     {
         initComplete = state;
         if (!state) return;
-        await UniTask.WaitUntil(() => isDepedencyLoaded);
+        await WaitForDependencyLoadOrTimeout();
         LoadingInformation.LoadingStatus?.Invoke("Audio systems initialized successfully.");
         await Unmute();
         LoadingInformation.LoadingStatus?.Invoke("");
@@ -112,8 +138,9 @@ public class MixerManager : MonoBehaviour
         // 1 - mute
         Mute();
 
-        // 2 - wait until load is complete
-        await UniTask.WaitUntil(() => isDepedencyLoaded);
+        // 2 - wait until load is complete (with a fallback: a region change that loads nothing
+        // never raises LoadComplete again, and the mixer must not stay muted forever)
+        await WaitForDependencyLoadOrTimeout();
         await UniTask.WaitUntil(() => initComplete);
 
         // 3 - unmute
@@ -157,6 +184,7 @@ public class MixerManager : MonoBehaviour
     }
     public void Mute()
     {
+        IsCurrentlyMuted = true;
         mainMixer.TransitionToSnapshots(snapshots, muteWeights, snapshotTransitionTime);
     }
 
@@ -168,7 +196,8 @@ public class MixerManager : MonoBehaviour
     public async UniTask Unmute()
     {
         _currentWeights ??= normalWeights; // assigning default weight in case currentWeight is null.
-        
+
+        IsCurrentlyMuted = false;
         mainMixer.TransitionToSnapshots(snapshots, _currentWeights, snapshotTransitionTime);
         await UniTask.WaitForSeconds(snapshotTransitionTime);
     }
