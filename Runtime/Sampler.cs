@@ -36,6 +36,44 @@ namespace jeanf.audiosystems
          [ReadOnly] public SamplerData currentSamplerData;
          public string clipToPlay;
          private bool _readyToPlay;
+         // One warning per unknown slug per component instance - a miss in an Update loop must not spam the console.
+         private readonly HashSet<string> _warnedUnknownSlugs = new HashSet<string>();
+
+         // Shared guards. Each failure names what is missing and where to fix it.
+         private bool AudioSourceIsMissing()
+         {
+             if (audioSource) return false;
+             Debug.LogWarning($"[Sampler] '{name}' has no AudioSource assigned (or it was destroyed) - assign one on the Sampler component.", this);
+             return true;
+         }
+
+         private bool ListIsMissingOrEmpty(List<SamplerData> list)
+         {
+             if (list != null && list.Count > 0) return false;
+             Debug.LogWarning($"[Sampler] '{name}' has no SamplerData to play: the samplerDataList is {(list == null ? "not assigned" : "empty")} - add SamplerData assets to the Sampler component (or pass a non-empty list).", this);
+             return true;
+         }
+
+         private bool EntryIsNull(SamplerData data)
+         {
+             if (data) return false;
+             Debug.LogWarning($"[Sampler] '{name}' samplerDataList contains a null entry - remove it or assign a SamplerData asset in that slot on the Sampler component.", this);
+             return true;
+         }
+
+         private bool ClipIsMissing(SamplerData data)
+         {
+             if (data.audioClip) return false;
+             Debug.LogWarning($"[Sampler] SamplerData '{data.name}' (slug '{data.slug}') has no audioClip assigned - assign one on the SamplerData asset.", this);
+             return true;
+         }
+
+         private void WarnUnknownSlug(string clipName, List<SamplerData> list)
+         {
+             if (!_warnedUnknownSlugs.Add(clipName ?? string.Empty)) return;
+             var available = string.Join(", ", list.Where(data => data).Select(data => $"'{data.slug}'"));
+             Debug.LogWarning($"[Sampler] '{name}' was asked to play unknown clip '{clipName}'. Available slugs: [{available}]. Fix the caller's clip name or add a SamplerData with this slug.", this);
+         }
 
 
          private void OnEnable() =>  Subscribe();
@@ -100,6 +138,7 @@ namespace jeanf.audiosystems
          private void Update()
          {
              if (!_readyToPlay) return;
+             if (!audioSource) return; // destroyed at runtime - per-frame path, so no warning here; the next Play call reports it.
              if (!audioSource.isPlaying) return;  // audioSource.time returns 0 if resource is ARC. How to fix?
              if (isLooping != true) return;
              // The loop window lives on currentSamplerData; without it there is nothing to snap to.
@@ -126,19 +165,12 @@ namespace jeanf.audiosystems
  
          public void PlayAudioClip()
          {
-             if (samplerDataList is null) return;
+             if (ListIsMissingOrEmpty(samplerDataList)) return;
              currentSamplerData = ReturnSamplerDataToPlay(samplerDataList);
 
-             if (currentSamplerData is null)
-             {
-                if (isDebug) Debug.Log($"no currentSamplerData for {this}");
-                 return;
-             }
-             if (audioSource is null) 
-             {
-                 if (isDebug) Debug.Log($"no audioSource for {this}");
-                 return;
-             }
+             if (EntryIsNull(currentSamplerData)) return;
+             if (ClipIsMissing(currentSamplerData)) return;
+             if (AudioSourceIsMissing()) return;
              if (samplerDataList.Count <= 0)
              {
                  samplerDataList = new List<SamplerData>()
@@ -147,8 +179,8 @@ namespace jeanf.audiosystems
                  };
              }
              _readyToPlay = true;
-             
-             samplerDataList[0].audioClip = currentSamplerData.audioClip;
+
+             if (samplerDataList[0]) samplerDataList[0].audioClip = currentSamplerData.audioClip;
 
              audioSource.clip = currentSamplerData.audioClip;
              audioSource.volume = currentSamplerData.volume;
@@ -173,8 +205,13 @@ namespace jeanf.audiosystems
          
         public void PlayAudioClip(SamplerData samplerData)
         {
-            if(samplerData is null) return;
-            if(samplerData.audioClip is null) return;
+            if (!samplerData)
+            {
+                Debug.LogWarning($"[Sampler] '{name}' PlayAudioClip was called with a null SamplerData - fix the caller.", this);
+                return;
+            }
+            if (ClipIsMissing(samplerData)) return;
+            if (AudioSourceIsMissing()) return;
             // Update reads the loop window off currentSamplerData, so it has to track what is playing.
             currentSamplerData = samplerData;
             audioSource.volume = samplerData.volume;
@@ -198,10 +235,12 @@ namespace jeanf.audiosystems
          
         public void PlayAudioClip(List<SamplerData> samplerDataList)
         {
+            if (ListIsMissingOrEmpty(samplerDataList)) return;
             var _samplerData = ReturnSamplerDataToPlay(samplerDataList);
 
-            if(_samplerData is null) return;
-            if(_samplerData.audioClip is null) return;
+            if (EntryIsNull(_samplerData)) return;
+            if (ClipIsMissing(_samplerData)) return;
+            if (AudioSourceIsMissing()) return;
 
             // Update reads the loop window off currentSamplerData; leaving it stale (or null) here
             // meant looping picks from this list threw in Update every frame.
@@ -229,15 +268,20 @@ namespace jeanf.audiosystems
          public float PlayThisAudioClip(string clipName) => PlayAudioClip(samplerDataList, clipName);
          public float PlayAudioClip(List<SamplerData> samplerDataList, string clipName)
          {
+             if (ListIsMissingOrEmpty(samplerDataList)) return 0f;
+             if (AudioSourceIsMissing()) return 0f;
+
              currentSamplerData = ReturnSamplerDataToPlayFromName(clipName);
-             
-             if (samplerDataList.Count == 0)
+
+             if (currentSamplerData is null)
              {
-                 if (isDebug) Debug.Log("audioclip not loaded; list with clipname", this);
-                 return 0;
+                 // Existing fallback behaviour is kept (first entry plays), but a miss is no longer silent.
+                 WarnUnknownSlug(clipName, this.samplerDataList ?? samplerDataList);
+                 currentSamplerData = samplerDataList[0];
              }
-             
-             if (currentSamplerData is null) currentSamplerData = samplerDataList[0];
+
+             if (EntryIsNull(currentSamplerData)) return 0f;
+             if (ClipIsMissing(currentSamplerData)) return 0f;
 
              audioSource.volume = currentSamplerData.volume;
              audioSource.clip = currentSamplerData.audioClip;
@@ -266,9 +310,10 @@ namespace jeanf.audiosystems
          public void StopAudioClip()
          {
              if(!_readyToPlay) return;
-             audioSource?.Stop();
              isLooping = false;
              _readyToPlay = false;
+             if (AudioSourceIsMissing()) return;
+             audioSource.Stop();
              if (!currentSamplerData) return;
              if (currentSamplerData.isPlayOneShot) return;
              audioSource.time = currentSamplerData.playOut;
@@ -278,14 +323,24 @@ namespace jeanf.audiosystems
 
          public void UpdateListOfClips(List<SamplerData> newAudioClips)
          {
-             samplerDataList.Clear();
-             samplerDataList.TrimExcess();
+             if (newAudioClips is null)
+             {
+                 Debug.LogWarning($"[Sampler] '{name}' UpdateListOfClips was called with a null list - fix the caller (pass an empty list to clear).", this);
+                 return;
+             }
+             if (samplerDataList != null)
+             {
+                 samplerDataList.Clear();
+                 samplerDataList.TrimExcess();
+             }
              samplerDataList = newAudioClips;
+             // The new list may resolve slugs the old one could not; allow those warnings to fire again.
+             _warnedUnknownSlugs.Clear();
          }
 
         public SamplerData ReturnSamplerDataToPlay(List<SamplerData> samplerDataList)
         {
-            if (samplerDataList.Count == 0)
+            if (samplerDataList is null || samplerDataList.Count == 0)
             {
               if (isDebug) Debug.Log("SamplerData list is empty");
                 return null;
@@ -301,7 +356,9 @@ namespace jeanf.audiosystems
         public SamplerData ReturnSamplerDataToPlayFromName(string clipName)
          {
              SamplerData _samplerData = null;
-             foreach (var data in samplerDataList.Where(data => data.slug == clipName))
+             if (samplerDataList is null) return null;
+             // Skip null/destroyed entries so one bad slot cannot break lookups for every other clip.
+             foreach (var data in samplerDataList.Where(data => data && data.slug == clipName))
              {
                  _samplerData = data;
              }
