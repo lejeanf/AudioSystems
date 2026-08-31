@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using jeanf.EventSystem;
@@ -10,6 +11,20 @@ using UnityEngine.Serialization;
 using UnityEditor;
 #endif
 
+/// <summary>
+/// Owns the master mixer's Muted/Normal/Stethoscope snapshots.
+///
+/// Contract (v0.6.0):
+/// - A region publish arriving DURING a region transition (WorldManager.IsRegionTransitioning)
+///   starts (or replaces) a single-flight unmute cycle: Mute -> gates -> Unmute.
+/// - A region publish arriving OUTSIDE a transition is a contiguous walk between co-loaded
+///   regions (or startup SetInitialLocation): it never mutes.
+/// - WorldManager.InitComplete is a latch plus a fallback trigger: it starts the cycle only when
+///   no cycle has ever run (a world with no initial region never publishes one, and the mixer
+///   asset starts on the Muted snapshot - without this fallback the game would stay silent).
+/// - Every gate is bounded and FAILS OPEN to audible with a warning naming the gate; a stuck
+///   mute is structurally impossible.
+/// </summary>
 public class MixerManager : MonoBehaviour
 {
     public AudioMixer mainMixer;
@@ -17,19 +32,42 @@ public class MixerManager : MonoBehaviour
     public float[] muteWeights;
     public float[] normalWeights;
     public float[] stethoscopeWeights;
-    private float[] _currentWeights; // either normal or stethoscope 
+    private float[] _currentWeights; // either normal or stethoscope
 
     [SerializeField] private float snapshotTransitionTime = 1.0f;
     [SerializeField] private float stethoscopeTransitionTime = 1.0f;
-    
-    [SerializeField] private float delayTimeForIntro = 0.5f;
 
-    private Coroutine _coroutine;
+    [Header("Unmute gates (seconds; every gate fails open to audible)")]
 
-    public bool isMuted = true;
-    private bool initComplete = false;
-    private bool isDepedencyLoaded = false;
+    /// <summary>How long a cycle may wait for WorldManager.InitComplete before unmuting anyway.</summary>
+    [SerializeField] private float initCompleteTimeout = 30f;
 
+    /// <summary>
+    /// How long a cycle may wait for the load-complete signal before proceeding anyway. A region
+    /// change that needs no scene loads never re-raises SceneLoader.LoadComplete - without this
+    /// fallback the mixer would stay on the Muted snapshot (Master at -80 dB) forever.
+    /// </summary>
+    [SerializeField] private float unmuteFallbackTimeout = 10f;
+
+    /// <summary>How long a cycle may wait for the region transition to end (teleport done, fade clearing).</summary>
+    [SerializeField] private float transitionEndTimeout = 15f;
+
+    /// <summary>
+    /// Fixed settle delay after the transition ends, before the unmute fade starts. Gives the
+    /// frame pipeline (spatializer geometry commits, streaming tails) margin beyond the two
+    /// frames WorldManager already waits, without this package knowing about any of them.
+    /// </summary>
+    [SerializeField] private float postTransitionSettleTime = 0.5f;
+
+    private bool _initComplete;
+    private bool _dependencyLoaded;
+    private CancellationTokenSource _cycleCts;
+
+    /// <summary>Monotonic count of unmute cycles started since domain load. Exists so tests can assert exactly one cycle runs per transition.</summary>
+    public static int CyclesStarted { get; private set; }
+
+    /// <summary>True while the mixer sits on (or transitions to) the Muted snapshot.</summary>
+    public bool IsCurrentlyMuted { get; private set; } = true;
 
     [FormerlySerializedAs("muteEvent")] [Header("Listening on:")] [SerializeField]
     private VoidEventChannelSO muteEventSO;
@@ -44,11 +82,6 @@ public class MixerManager : MonoBehaviour
     [Header("Broadcasting on:")] [SerializeField]
     private VoidEventChannelSO floorLoadingIsFinishedAndSoundIsUnMuted;
 
-    [SerializeField] private VoidEventChannelSO introSound;
-    
-    
-
-
     private void Awake()
     {
         mainMixer.updateMode = AudioMixerUpdateMode.UnscaledTime;
@@ -58,130 +91,157 @@ public class MixerManager : MonoBehaviour
 
     private void OnEnable() => Subscribe();
     private void OnDisable() => Unsubscribe();
-    private void OnDestroy() => Unsubscribe();
 
+    private void OnDestroy()
+    {
+        Unsubscribe();
+        CancelCycle();
+    }
+
+    // Method-group subscriptions only (no adapter lambdas - a lambda in `-=` removes nothing,
+    // and PublishCurrentRegionId is static, so leaked handlers from destroyed instances keep
+    // driving the shared mixer asset). Unsubscribe-then-subscribe keeps re-enables idempotent.
     private void Subscribe()
     {
+        Unsubscribe();
         WorldManager.InitComplete += OnInitComplete;
-        WorldManager.PublishCurrentRegionId += ctx => OnRegionChange();
+        WorldManager.PublishCurrentRegionId += OnRegionPublished;
         SceneLoader.LoadComplete += OnDependencyLoadComplete;
-        muteEventSO.OnEventRaised += Mute;
-        MuteEvent += Mute;
-        UnMuteEvent += OnUnmute;
-        unmuteEventSO.OnEventRaised += OnUnmute;
-        stethoscopeStateEvent.OnEventRaised += ConsumeStethoscopeState;
-        
+        MuteEvent += OnMuteRequested;
+        UnMuteEvent += OnUnmuteRequested;
+        if (muteEventSO != null) muteEventSO.OnEventRaised += OnMuteRequested;
+        if (unmuteEventSO != null) unmuteEventSO.OnEventRaised += OnUnmuteRequested;
+        if (stethoscopeStateEvent != null) stethoscopeStateEvent.OnEventRaised += ConsumeStethoscopeState;
     }
 
     private void Unsubscribe()
     {
         WorldManager.InitComplete -= OnInitComplete;
-        WorldManager.PublishCurrentRegionId -= ctx => OnRegionChange();
+        WorldManager.PublishCurrentRegionId -= OnRegionPublished;
         SceneLoader.LoadComplete -= OnDependencyLoadComplete;
-        muteEventSO.OnEventRaised -= Mute;
-        MuteEvent -= Mute;
-        UnMuteEvent -= OnUnmute;
-        unmuteEventSO.OnEventRaised -= OnUnmute;
-        stethoscopeStateEvent.OnEventRaised -= ConsumeStethoscopeState;
-        if (_coroutine != null) StopCoroutine(_coroutine);
+        MuteEvent -= OnMuteRequested;
+        UnMuteEvent -= OnUnmuteRequested;
+        if (muteEventSO != null) muteEventSO.OnEventRaised -= OnMuteRequested;
+        if (unmuteEventSO != null) unmuteEventSO.OnEventRaised -= OnUnmuteRequested;
+        if (stethoscopeStateEvent != null) stethoscopeStateEvent.OnEventRaised -= ConsumeStethoscopeState;
+    }
+
+    private void OnRegionPublished(string regionId)
+    {
+        if (!WorldManager.IsRegionTransitioning)
+        {
+            // Contiguous walk between co-loaded regions (or startup SetInitialLocation):
+            // the world never visibly unloads, so the audio never mutes.
+            Debug.Log($"[MixerManager] contiguous region publish '{regionId}' - no mute");
+            return;
+        }
+        StartCycle($"region '{regionId}'");
+    }
+
+    private void OnInitComplete(bool state)
+    {
+        _initComplete = state;
+        if (!state) return;
+        // Fallback owner: a world without an initial region never publishes one, and the mixer
+        // starts Muted - some cycle must run once or the game stays silent forever.
+        if (CyclesStarted == 0 && _cycleCts == null) StartCycle("init-complete (no region publish)");
     }
 
     private void OnDependencyLoadComplete(bool state)
     {
         if (!state) return;
-        isDepedencyLoaded = true;
+        _dependencyLoaded = true;
     }
 
-    /// <summary>
-    /// How long a mute may wait for the load-complete signal before unmuting anyway. A region
-    /// change that needs no scene loads (or a LoadComplete that fires before the flag reset)
-    /// never re-raises the signal - without this fallback the mixer then stays on the Muted
-    /// snapshot (Master at -80 dB) forever and the entire game goes silent.
-    /// </summary>
-    [SerializeField] private float unmuteFallbackTimeout = 10f;
-
-    /// <summary>True while the mixer sits on (or transitions to) the Muted snapshot.</summary>
-    public bool IsCurrentlyMuted { get; private set; } = true;
-
-    private async UniTask WaitForDependencyLoadOrTimeout()
+    private void OnMuteRequested()
     {
-        float start = Time.unscaledTime;
-        while (!isDepedencyLoaded && Time.unscaledTime - start < unmuteFallbackTimeout)
-        {
-            await UniTask.Yield();
-        }
-
-        if (!isDepedencyLoaded)
-        {
-            Debug.LogWarning($"[MixerManager] No load-complete signal after {unmuteFallbackTimeout}s - " +
-                             "unmuting anyway so the game does not stay silent.", this);
-        }
-    }
-
-    private async void OnInitComplete(bool state)
-    {
-        initComplete = state;
-        if (!state) return;
-        await WaitForDependencyLoadOrTimeout();
-        LoadingInformation.LoadingStatus?.Invoke("Audio systems initialized successfully.");
-        await Unmute();
-        LoadingInformation.LoadingStatus?.Invoke("");
-
-        // send event for intro sound trigger.
-        await UniTask.WaitForSeconds(snapshotTransitionTime + delayTimeForIntro);
-        introSound?.RaiseEvent();
-    }
-
-    private async void OnRegionChange()
-    {
-        isDepedencyLoaded = false;
-        // 1 - mute
+        // A forced mute (e.g. application quit) must not be undone by an in-flight cycle.
+        CancelCycle();
         Mute();
+    }
 
-        // 2 - wait until load is complete (with a fallback: a region change that loads nothing
-        // never raises LoadComplete again, and the mixer must not stay muted forever)
-        await WaitForDependencyLoadOrTimeout();
-        await UniTask.WaitUntil(() => initComplete);
+    private void OnUnmuteRequested()
+    {
+        CancelCycle();
+        Unmute().Forget();
+    }
 
-        // 3 - unmute
-        await Unmute();
-        await UniTask.WaitForSeconds(.1f);
+    private void StartCycle(string trigger)
+    {
+        CancelCycle();
+        _cycleCts = new CancellationTokenSource();
+        CyclesStarted++;
+        RunUnmuteCycle(trigger, _cycleCts.Token).Forget();
+    }
 
-        // 4 - elevator sound
-        floorLoadingIsFinishedAndSoundIsUnMuted.RaiseEvent();
+    private void CancelCycle()
+    {
+        if (_cycleCts == null) return;
+        var cts = _cycleCts;
+        _cycleCts = null;
+        cts.Cancel();
+        cts.Dispose();
+    }
+
+    private async UniTaskVoid RunUnmuteCycle(string trigger, CancellationToken token)
+    {
+        Debug.Log($"[MixerManager] unmute cycle #{CyclesStarted} started by {trigger}");
+        _dependencyLoaded = false;
+        Mute();
+        LoadingInformation.LoadingStatus?.Invoke("Loading audio environment");
+        try
+        {
+            await WaitForGate("init-complete", () => _initComplete, initCompleteTimeout, token);
+            await WaitForGate("load-complete", () => _dependencyLoaded, unmuteFallbackTimeout, token);
+            await WaitForGate("transition-end", () => !WorldManager.IsRegionTransitioning, transitionEndTimeout, token);
+            await UniTask.WaitForSeconds(postTransitionSettleTime, ignoreTimeScale: true, cancellationToken: token);
+
+            LoadingInformation.LoadingStatus?.Invoke("Audio systems initialized successfully.");
+            await Unmute();
+            LoadingInformation.LoadingStatus?.Invoke("");
+
+            await UniTask.WaitForSeconds(.1f, ignoreTimeScale: true, cancellationToken: token);
+            floorLoadingIsFinishedAndSoundIsUnMuted?.RaiseEvent();
+        }
+        catch (OperationCanceledException)
+        {
+            Debug.Log($"[MixerManager] unmute cycle ({trigger}) superseded or cancelled");
+        }
+    }
+
+    private static async UniTask WaitForGate(string gate, Func<bool> condition, float timeout, CancellationToken token)
+    {
+        var start = Time.unscaledTime;
+        while (!condition() && Time.unscaledTime - start < timeout)
+        {
+            await UniTask.Yield(PlayerLoopTiming.Update, token);
+        }
+
+        if (condition())
+        {
+            Debug.Log($"[MixerManager] unmute gate '{gate}' passed after {Time.unscaledTime - start:F1}s");
+        }
+        else
+        {
+            Debug.LogWarning($"[MixerManager] unmute gate '{gate}' timed out after {timeout}s - " +
+                             "proceeding so the game does not stay silent.");
+        }
     }
 
     private void ConsumeStethoscopeState(bool state)
     {
         _currentWeights = state ? stethoscopeWeights : normalWeights;
         mainMixer.TransitionToSnapshots(snapshots, _currentWeights, stethoscopeTransitionTime);
-        Debug.Log($"current weights = [{string.Join(", ", _currentWeights)}] ");
     }
 
     public void ToggleMixerSnapshot()
     {
-        isMuted = !isMuted;
-        Debug.Log($"isMuted = {isMuted}");
-
-        if (isMuted) Unmute().Forget();
-        else
-        {
-            Mute();
-        }
+        CancelCycle();
+        if (IsCurrentlyMuted) Unmute().Forget();
+        else Mute();
+        Debug.Log($"[MixerManager] toggled -> IsCurrentlyMuted = {IsCurrentlyMuted}");
     }
 
-    private void SetMixerState(bool isLoading)
-    {
-        Debug.Log($"[Mixer Manager] Received new mixer state: {isLoading}");
-        if (isLoading)
-        {
-            Mute();
-        }
-        else
-        {
-            Unmute().Forget();
-        }
-    }
     public void Mute()
     {
         IsCurrentlyMuted = true;
@@ -201,7 +261,6 @@ public class MixerManager : MonoBehaviour
         mainMixer.TransitionToSnapshots(snapshots, _currentWeights, snapshotTransitionTime);
         await UniTask.WaitForSeconds(snapshotTransitionTime);
     }
-
 }
 #if UNITY_EDITOR
 [CustomEditor(typeof(MixerManager))]
