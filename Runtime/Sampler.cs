@@ -38,6 +38,10 @@ namespace jeanf.audiosystems
          private bool _readyToPlay;
          // One warning per unknown slug per component instance - a miss in an Update loop must not spam the console.
          private readonly HashSet<string> _warnedUnknownSlugs = new HashSet<string>();
+         // Stored once so Unsubscribe removes the SAME delegates Subscribe added - a fresh lambda in `-=`
+         // removes nothing and stacks a handler per enable cycle (the MixerManager/AudioSourceOptimizer defect class).
+         private Action<InputAction.CallbackContext> _onPlayKey;
+         private Action<InputAction.CallbackContext> _onStopKey;
 
          // Shared guards. Each failure names what is missing and where to fix it.
          private bool AudioSourceIsMissing()
@@ -82,11 +86,21 @@ namespace jeanf.audiosystems
          
          public void Subscribe()
          {
-             playKey.Enable();
-             playKey.performed += ctx => PlayAudioClip(samplerDataList, clipToPlay);
-             
-             stopKey.Enable();
-             stopKey.performed += ctx => StopAudioClip();
+             _onPlayKey ??= ctx => PlayAudioClip(samplerDataList, clipToPlay);
+             _onStopKey ??= ctx => StopAudioClip();
+
+             // The key bindings are optional: a Sampler created at runtime (or driven purely by the
+             // channels) has null actions, and enabling must not NRE out of OnEnable.
+             if (playKey != null)
+             {
+                 playKey.Enable();
+                 playKey.performed += _onPlayKey;
+             }
+             if (stopKey != null)
+             {
+                 stopKey.Enable();
+                 stopKey.performed += _onStopKey;
+             }
 
              if(GroupChannel) GroupChannel.OnEventRaised += DecideWhatToDo;
              if(PersonnalChannel) PersonnalChannel.OnEventRaised += DecideWhatToDo;
@@ -94,28 +108,22 @@ namespace jeanf.audiosystems
          
          public void Unsubscribe()
          {
-             playKey.performed -= ctx => PlayAudioClip();
-             playKey.Disable();
-             
-             stopKey.performed -= ctx => StopAudioClip();
-             stopKey.Disable();
+             if (playKey != null)
+             {
+                 playKey.performed -= _onPlayKey;
+                 playKey.Disable();
+             }
+             if (stopKey != null)
+             {
+                 stopKey.performed -= _onStopKey;
+                 stopKey.Disable();
+             }
 
              if (GroupChannel) GroupChannel.OnEventRaised -= DecideWhatToDo;
              if (PersonnalChannel) PersonnalChannel.OnEventRaised -= DecideWhatToDo;
 
              StopAudioAsync();
              _readyToPlay = false;
-         }
-
-         private void ClearLocalData()
-         {
-             if (samplerDataList is null) return;
-             
-             samplerDataList.Clear();
-             samplerDataList.TrimExcess();
-             samplerDataList = null;
-             
-             currentSamplerData = null;
          }
 
          private void StopAudioAsync()
@@ -171,17 +179,11 @@ namespace jeanf.audiosystems
              if (EntryIsNull(currentSamplerData)) return;
              if (ClipIsMissing(currentSamplerData)) return;
              if (AudioSourceIsMissing()) return;
-             if (samplerDataList.Count <= 0)
-             {
-                 samplerDataList = new List<SamplerData>()
-                 {
-                     currentSamplerData
-                 };
-             }
              _readyToPlay = true;
 
-             if (samplerDataList[0]) samplerDataList[0].audioClip = currentSamplerData.audioClip;
-
+             // Owner ruling 2026-08-31: SamplerData assets are read-only to the Sampler. The old code
+             // copied the chosen clip into samplerDataList[0].audioClip - persistent asset corruption
+             // in-editor. (An unreachable empty-list rebuild block was deleted with it.)
              audioSource.clip = currentSamplerData.audioClip;
              audioSource.volume = currentSamplerData.volume;
              audioSource.Stop();
@@ -266,18 +268,22 @@ namespace jeanf.audiosystems
         }
 
          public float PlayThisAudioClip(string clipName) => PlayAudioClip(samplerDataList, clipName);
-         public float PlayAudioClip(List<SamplerData> samplerDataList, string clipName)
+         // NOTE: the slug lookup reads the INSTANCE list (ReturnSamplerDataToPlayFromName), not the passed
+         // one - the parameter only feeds the guards and the fallback. Long-standing behavior, callers rely
+         // on it via PlayThisAudioClip; renamed the parameter so the shadowing is at least visible.
+         public float PlayAudioClip(List<SamplerData> list, string clipName)
          {
-             if (ListIsMissingOrEmpty(samplerDataList)) return 0f;
+             if (ListIsMissingOrEmpty(list)) return 0f;
              if (AudioSourceIsMissing()) return 0f;
 
              currentSamplerData = ReturnSamplerDataToPlayFromName(clipName);
 
              if (currentSamplerData is null)
              {
-                 // Existing fallback behaviour is kept (first entry plays), but a miss is no longer silent.
-                 WarnUnknownSlug(clipName, this.samplerDataList ?? samplerDataList);
-                 currentSamplerData = samplerDataList[0];
+                 // Owner ruling 2026-08-31: the first-entry fallback STAYS - a miss plays list[0], audibly
+                 // and with the warning naming the missing slug (once per slug per instance).
+                 WarnUnknownSlug(clipName, samplerDataList ?? list);
+                 currentSamplerData = list[0];
              }
 
              if (EntryIsNull(currentSamplerData)) return 0f;
