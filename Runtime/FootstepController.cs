@@ -59,15 +59,18 @@ namespace jeanf.audiosystems
 
         private void Subscribe()
         {
-           isMovingChannel.OnEventRaised += ctx => _isMoving = ctx;
-           GeneralPauseEvent.OnEventRaised += ctx => _isPaused = ctx;
+           isMovingChannel.OnEventRaised += SetIsMoving;
+           GeneralPauseEvent.OnEventRaised += SetIsPaused;
         }
 
         private void Unsubscribe()
         {
-          isMovingChannel.OnEventRaised -= ctx => _isMoving = ctx;
-          GeneralPauseEvent.OnEventRaised -= ctx => _isPaused = ctx;
+          isMovingChannel.OnEventRaised -= SetIsMoving;
+          GeneralPauseEvent.OnEventRaised -= SetIsPaused;
         }
+
+        private void SetIsMoving(bool value) => _isMoving = value;
+        private void SetIsPaused(bool value) => _isPaused = value;
    
 
         private void Update()
