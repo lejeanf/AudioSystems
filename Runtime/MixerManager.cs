@@ -33,7 +33,8 @@ public class MixerManager : MonoBehaviour
     public float[] normalWeights;
     public float[] stethoscopeWeights;
     private float[] _currentWeights; // either normal or stethoscope
-
+    
+    [SerializeField] public bool isDebug;
     [SerializeField] private float snapshotTransitionTime = 1.0f;
     [SerializeField] private float stethoscopeTransitionTime = 1.0f;
 
@@ -132,7 +133,7 @@ public class MixerManager : MonoBehaviour
         {
             // Contiguous walk between co-loaded regions (or startup SetInitialLocation):
             // the world never visibly unloads, so the audio never mutes.
-            Debug.Log($"[MixerManager] contiguous region publish '{regionId}' - no mute");
+           if (isDebug) Debug.Log($"[MixerManager] contiguous region publish '{regionId}' - no mute");
             return;
         }
         StartCycle($"region '{regionId}'");
@@ -185,7 +186,7 @@ public class MixerManager : MonoBehaviour
 
     private async UniTaskVoid RunUnmuteCycle(string trigger, CancellationToken token)
     {
-        Debug.Log($"[MixerManager] unmute cycle #{CyclesStarted} started by {trigger}");
+       if (isDebug) Debug.Log($"[MixerManager] unmute cycle #{CyclesStarted} started by {trigger}");
         _dependencyLoaded = false;
         Mute();
         LoadingInformation.LoadingStatus?.Invoke("Loading audio environment");
@@ -205,7 +206,7 @@ public class MixerManager : MonoBehaviour
         }
         catch (OperationCanceledException)
         {
-            Debug.Log($"[MixerManager] unmute cycle ({trigger}) superseded or cancelled");
+           if (isDebug) Debug.Log($"[MixerManager] unmute cycle ({trigger}) superseded or cancelled");
         }
     }
 
@@ -223,7 +224,7 @@ public class MixerManager : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning($"[MixerManager] unmute gate '{gate}' timed out after {timeout}s - " +
+           Debug.LogWarning($"[MixerManager] unmute gate '{gate}' timed out after {timeout}s - " +
                              "proceeding so the game does not stay silent.");
         }
     }
@@ -239,7 +240,7 @@ public class MixerManager : MonoBehaviour
         CancelCycle();
         if (IsCurrentlyMuted) Unmute().Forget();
         else Mute();
-        Debug.Log($"[MixerManager] toggled -> IsCurrentlyMuted = {IsCurrentlyMuted}");
+       if (isDebug) Debug.Log($"[MixerManager] toggled -> IsCurrentlyMuted = {IsCurrentlyMuted}");
     }
 
     public void Mute()
