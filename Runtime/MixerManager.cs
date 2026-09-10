@@ -220,7 +220,7 @@ public class MixerManager : MonoBehaviour
 
         if (condition())
         {
-            Debug.Log($"[MixerManager] unmute gate '{gate}' passed after {Time.unscaledTime - start:F1}s");
+           Debug.Log($"[MixerManager] unmute gate '{gate}' passed after {Time.unscaledTime - start:F1}s");
         }
         else
         {
