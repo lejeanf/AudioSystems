@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using UnityEngine;
 using jeanf.EventSystem;
 
@@ -20,7 +21,8 @@ namespace jeanf.audiosystems
         [SerializeField] public AudioSource audioSource;
         [SerializeField] private AudioClip[] clips;
         [SerializeField] private PlaybackMode playbackMode = PlaybackMode.Random;
-        [SerializeField] [Range(60f, 200f)] public float bpm = 120f;
+        [Tooltip("Cycles per minute. Read by the audio thread every buffer; a change applies from the next beat.")]
+        [SerializeField] [Range(1f, 300f)] public float bpm = 120f;
         [SerializeField] [Range(0f, 1f)] private float volume = 1f;
 
         [Header("Event System")]
@@ -47,18 +49,76 @@ namespace jeanf.audiosystems
         private double _samplesPerBeat;
         private int _samplePlaybackPosition;
 
-        
+        // Beat clock, published by the audio thread for main-thread followers (animation, UI).
+        // Written only inside OnAudioFilterRead; read anywhere through Volatile.Read.
+        private double _lastBeatDspTime;
+        private double _beatPeriodSeconds;
+        private long _beatCount;
+
+        /// <summary>
+        /// DSP time (AudioSettings.dspTime clock) at which the most recent beat was scheduled.
+        /// Sample-accurate: the scheduled sample, not the buffer it was rendered in. 0 before the
+        /// first beat after <see cref="Play"/>.
+        /// </summary>
+        public double LastBeatDspTime => Volatile.Read(ref _lastBeatDspTime);
+
+        /// <summary>Beat period in seconds that was in force when the last beat fired (60 / bpm at that moment).</summary>
+        public double BeatPeriodSeconds => Volatile.Read(ref _beatPeriodSeconds);
+
+        /// <summary>Beats fired since the last <see cref="Play"/>.</summary>
+        public long BeatCount => Interlocked.Read(ref _beatCount);
+
+        /// <summary>True while the beat clock advances: running and not paused.</summary>
+        public bool IsRunning => _isRunning && !_isPaused;
+
+        /// <summary>
+        /// Progress through the current beat, 0 at the beat and rising to 1 at the next one, from the
+        /// published clock and the caller's reading of AudioSettings.dspTime. Clamped: when the bpm was
+        /// just lowered the next beat is later than the old period predicts, so the phase holds at 1
+        /// instead of wrapping. 0 before the first beat.
+        /// </summary>
+        public static double BeatPhase(double dspNow, double lastBeatDspTime, double beatPeriodSeconds)
+        {
+            if (beatPeriodSeconds <= 0 || lastBeatDspTime <= 0) return 0;
+            double phase = (dspNow - lastBeatDspTime) / beatPeriodSeconds;
+            if (phase < 0) return 0;
+            return phase > 1 ? 1 : phase;
+        }
+
         public void Play()
         {
             double startDspTime = AudioSettings.dspTime;
             _nextBeatSample = startDspTime * _sampleRate;
             _samplePlaybackPosition = 0;
+            ResetBeatClock();
             RegenerateClipSequence();
             _isRunning = true;
         }
 
         public void Stop() => _isRunning = false;
-        public void Pause(bool paused) => _isPaused = paused;
+
+        /// <summary>
+        /// Pausing holds the beat clock; the DSP clock keeps running. On resume the next beat is
+        /// re-anchored to now, otherwise every beat missed during the pause fires as a burst.
+        /// </summary>
+        public void Pause(bool paused)
+        {
+            if (!paused && _isPaused)
+            {
+                // The audio thread returns early while paused, so _nextBeatSample is ours here;
+                // the volatile write below publishes it before the thread sees the unpause.
+                double nowSample = AudioSettings.dspTime * _sampleRate;
+                if (_nextBeatSample < nowSample) _nextBeatSample = nowSample;
+            }
+            Volatile.Write(ref _isPaused, paused);
+        }
+
+        private void ResetBeatClock()
+        {
+            Volatile.Write(ref _lastBeatDspTime, 0);
+            Volatile.Write(ref _beatPeriodSeconds, bpm > 0 ? 60.0 / bpm : 0);
+            Interlocked.Exchange(ref _beatCount, 0);
+        }
         
         public void SetPlaybackMode(PlaybackMode newMode)
         {
@@ -248,6 +308,7 @@ namespace jeanf.audiosystems
             double startDspTime = AudioSettings.dspTime;
             _nextBeatSample = startDspTime * _sampleRate;
             _samplePlaybackPosition = 0;
+            ResetBeatClock();
             _isRunning = true;
         }
 
@@ -272,10 +333,15 @@ namespace jeanf.audiosystems
                 // Check if we need to trigger a new beat
                 if (!beatTriggered && currentSample + n >= _nextBeatSample)
                 {
+                    double beatSample = _nextBeatSample;
                     _nextBeatSample += _samplesPerBeat;
                     _currentClipIndex = GetNextClipIndex();
                     _samplePlaybackPosition = 0;
                     beatTriggered = true;
+
+                    Volatile.Write(ref _lastBeatDspTime, beatSample / _sampleRate);
+                    Volatile.Write(ref _beatPeriodSeconds, _samplesPerBeat / _sampleRate);
+                    Interlocked.Increment(ref _beatCount);
                 }
 
                 float sampleValue = 0f;

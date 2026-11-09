@@ -9,6 +9,7 @@ Components:
 - "Mixer Manager": an interface for Unity's Mixer Snapshots
 - "FootstepController": a simple footstep sound system using Unity's AudioRandomContainer, featuring dynamic stereo placement and Raycast identification of ground tags for different sound type allocation.
 - "Metronome" Simple player using dynamically adjustable BPM (managed by a timeline or script), optimized for stability through duplicate audiosources and using Unity's PlayScheduled() method.
+- "BpmSampler": fires one clip from a bank per beat on the audio thread (OnAudioFilterRead), sample-accurate against AudioSettings.dspTime, with a live-adjustable bpm. Publishes its beat clock (LastBeatDspTime, BeatPeriodSeconds, BeatCount, IsRunning, static BeatPhase) so main-thread followers such as an animation can lock to the cycle.
 
 ------------------------------------------------------------------------------------------------------
 How to install the package:
